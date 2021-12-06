@@ -1,0 +1,26 @@
+{
+  "name": "mesh_root",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": "",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "authors": [],
+  "license": "MIT",
+  "homepage": "",
+  "dependencies": {
+    "PubSubClient": "",
+    "painlessMesh": "",
+    "ESPAsyncTCP": "",
+    "ESPAsyncWebServer": "",
+    "ArduinoJson": "",
+    "Arduino": "",
+    "AsyncTCP": "",
+    "AsyncWebServer": "",
+    "WiFiClient": ""
+  },
+  "frameworks": "*",
+  "platforms": "*"
+}
