@@ -1,0 +1,15 @@
+{
+  "node": {
+    "topic": "",
+    "meshPrefix": "",
+    "meshPassword": "",
+    "meshPort": 5555,
+    "meshChannel": 6,
+    "stationSSID": "",
+    "stationPassword": "",
+    "mqttHost": "",
+    "hostname": "",
+    "isRoot": true
+  },
+  "module": "ledStrip","ledStrip": { "bright": 100, "speed": 500, "mode": 12, "color": 16777216 }
+}

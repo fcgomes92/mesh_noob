@@ -1,0 +1,15 @@
+{
+  "node": {
+    "topic": "",
+    "meshPrefix": "",
+    "meshPassword": "",
+    "meshPort": 5555,
+    "meshChannel": 6,
+    "stationSSID": "",
+    "stationPassword": "",
+    "mqttHost": "",
+    "hostname": "",
+    "isRoot": true
+  },
+  "module": "sensors","sensors": { "interval": 1000 }
+}

@@ -1,0 +1,6 @@
+.pio
+.vscode
+.env
+data/config.txt
+data/configc.txt
+venv
