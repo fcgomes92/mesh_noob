@@ -1,0 +1,34 @@
+<mxfile host="65bd71144e">
+    <diagram id="nVpSrsNgSiKSM0HlZ1ZF" name="Page-1">
+        <mxGraphModel dx="630" dy="1709" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="9" value="&lt;div style=&quot;font-size: 14px&quot;&gt;&lt;span&gt;&lt;font style=&quot;font-size: 14px&quot;&gt;central command handler is responsible for handling incomming messages, module commands and the default behaviour in the network&lt;/font&gt;&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;font-size: 14px&quot;&gt;&lt;span&gt;&lt;font style=&quot;font-size: 14px&quot;&gt;the handler is separated from the access endpoints&lt;/font&gt;&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;text-align: justify&quot;&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="50" y="-160" width="180" height="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="" style="edgeStyle=none;html=1;" parent="1" source="2" target="3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="" style="edgeStyle=none;html=1;" parent="1" source="2" target="5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="" style="edgeStyle=none;html=1;" parent="1" source="2" target="7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="mesh_noob&lt;br&gt;&lt;br&gt;&lt;div style=&quot;text-align: left&quot;&gt;- mesh network setup&lt;/div&gt;&lt;div style=&quot;text-align: left&quot;&gt;- node webserver&lt;/div&gt;&lt;div style=&quot;text-align: left&quot;&gt;- FS config abstraction&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="40" width="200" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="AOT module" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="55" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="outlet module" style="whiteSpace=wrap;html=1;rounded=0;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="225" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="sensors module" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="353.34000000000003" y="225" width="133.33" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -2,6 +2,7 @@
 #define log_h
 
 #include <Arduino.h>
+#include "env.h"
 
 #ifndef LOG
 #define LOG(...) \

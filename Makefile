@@ -1,3 +1,6 @@
+default: all
+all: upload monitor
+
 .PHONY: monitor upload build uploadFiles
 
 build:
@@ -9,5 +12,7 @@ monitor:
 upload:
 	@pio run --target upload
 
-uploadFiles:
+_uploadFiles:
 	@pio run --target uploadfs
+
+uploadFiles: _uploadFiles monitor

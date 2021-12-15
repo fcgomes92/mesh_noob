@@ -1,21 +1,12 @@
-#include <painlessMesh.h>
-#include <Arduino.h>
-#include <ArduinoJson.h>
-#include "FS.h"
-// #include "SPIFFS.h"
+#include "modules/mesh.h"
+#include "modules/webserver.h"
+#include "utils.h"
+#include "log.h"
+
 #include <CRC32.h>
-#include <Effortless_SPIFFS.h>
-#include "AsyncJson.h"
 
-#ifdef ESP8266
-#include "Hash.h"
-#include <ESPAsyncTCP.h>
-#else
-#include <AsyncTCP.h>
-#endif
-#include <ESPAsyncWebServer.h>
-
-#include "env.h"
+#include <FS.h>
+// #include <SPIFFS.h>
 
 #define MESH_PREFIX uaiot
 #define MESH_PASSWORD HafniumInsultSpecialLand9
@@ -26,20 +17,18 @@
 #define STATION_PASSWORD batataassadaS2
 
 #define MQTT_HOST berry.ccs
-#define HOSTNAME MQTT_Bridge
-#define NODE_CONFIG_PATH "/nodeConfig.json"
-#define NODE_CONFIG_CHKSUM_PATH "/nodeConfig.chksum.json"
+#define HOSTNAME MQTT_Bridge_leaf
+#define NODE_CONFIG_PATH "/config.txt"
+#define NODE_CONFIG_CHKSUM_PATH "/configc.txt"
+
 DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(32));
 AsyncWebServer server(80);
 painlessMesh mesh;
 IPAddress myIP(0, 0, 0, 0);
 
-void logConfig(DynamicJsonDocument *config);
-DynamicJsonDocument saveConfig(eSPIFFS *fileSystem, DynamicJsonDocument nodeConfig);
-DynamicJsonDocument loadConfig(eSPIFFS *fileSystem);
-void createMesh(painlessMesh *mesh, String prefix, String password, int port, int channel, String hostname, String ssid, String stationPassword, bool root, painlessmesh::receivedCallback_t onReceive);
-void receivedCallback(const uint32_t &_from, const String &msg);
-IPAddress getlocalIP(painlessMesh *mesh);
+DynamicJsonDocument saveConfig(DynamicJsonDocument nodeConfig);
+DynamicJsonDocument loadConfig();
+void receivedCallback(const unsigned long int &_from, const String &msg);
 // NodeConfig nodeConfig;
 
 void setup()
@@ -48,8 +37,14 @@ void setup()
     LOG("###");
     Serial.begin(115200);
 
-    eSPIFFS fileSystem(&Serial);
-    nodeConfig = loadConfig(&fileSystem);
+    if (!SPIFFS.begin())
+    {
+        Serial.println("An Error has occurred while mounting SPIFFS");
+        return;
+    }
+
+    // eSPIFFS fileSystem(&Serial);
+    nodeConfig = loadConfig();
 
     LOG("Configuring mesh");
     createMesh(&mesh,
@@ -60,10 +55,10 @@ void setup()
                nodeConfig["hostname"].as<String>(),
                nodeConfig["stationSSID"].as<String>(),
                nodeConfig["stationPassword"].as<String>(),
-               true,
+               nodeConfig["isRoot"].as<bool>(),
                &receivedCallback);
 
-    //Async webserver
+    // Async webserver
     AsyncCallbackJsonWebHandler *handler = new AsyncCallbackJsonWebHandler("/node/setup", [&](AsyncWebServerRequest *request, JsonVariant &json)
                                                                            {
                                                                                if (request->method() == HTTP_POST)
@@ -73,15 +68,14 @@ void setup()
                                                                                    response->addHeader("Server", nodeConfig["hostname"]);
                                                                                    JsonObject root = response->getRoot();
                                                                                    nodeConfig = jsonObj;
-                                                                                   root["data"] = saveConfig(&fileSystem, nodeConfig);
+                                                                                   root["data"] = saveConfig(nodeConfig);
                                                                                    response->setLength();
                                                                                    request->send(response);
                                                                                }
                                                                                else
                                                                                {
                                                                                    request->send(404);
-                                                                               }
-                                                                           });
+                                                                               } });
     server.addHandler(handler);
 
     AsyncCallbackJsonWebHandler *handlerBroadcast = new AsyncCallbackJsonWebHandler("/broadcast", [&](AsyncWebServerRequest *request, JsonVariant &json)
@@ -95,10 +89,7 @@ void setup()
                                                                                         mesh.sendBroadcast(msg);
                                                                                         response->setLength();
                                                                                         response->setCode(200);
-                                                                                        request->send(response);
-                                                                                    });
-    server.on("/settings/heap", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/plain", String(ESP.getFreeHeap())); });
+                                                                                        request->send(response); });
     server.addHandler(handlerBroadcast);
     server.on("/settings/node", HTTP_GET, [](AsyncWebServerRequest *request)
               {
@@ -107,10 +98,7 @@ void setup()
                   JsonObject root = response->getRoot();
                   root["data"] = nodeConfig;
                   response->setLength();
-                  request->send(response);
-              });
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(SPIFFS, "/index.htm", "text/html"); });
+                  request->send(response); });
     server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.htm");
     server.begin();
 }
@@ -125,50 +113,61 @@ void loop()
     }
 }
 
-DynamicJsonDocument saveConfig(eSPIFFS *fileSystem, DynamicJsonDocument nodeConfig)
+DynamicJsonDocument saveConfig(DynamicJsonDocument nodeConfig)
 {
-    String newConfigOutput;
-    uint32_t chksum = 0;
+    File newConfigFile = SPIFFS.open(NODE_CONFIG_PATH, "w");
+    File newConfigCheckSumFile = SPIFFS.open(NODE_CONFIG_CHKSUM_PATH, "w");
+    String newConfigOutput{""};
+    unsigned long int chksum{0};
     CRC32 cs;
 
     // serialize current config
     serializeJson(nodeConfig, newConfigOutput);
 
     // calculate checksum of new config
-    cs.update(newConfigOutput);
+    cs.update(newConfigOutput.c_str());
     chksum = cs.finalize();
 
     // save new config
     LOG("Writing new config");
-    fileSystem->saveToFile(NODE_CONFIG_PATH, newConfigOutput);
+    LOG(newConfigOutput);
+    newConfigFile.print(newConfigOutput.c_str());
+    newConfigFile.close();
 
     LOG("Writing new config chksum");
-    fileSystem->saveToFile(NODE_CONFIG_CHKSUM_PATH, chksum);
+    LOG(chksum);
+    newConfigCheckSumFile.print(String(chksum).c_str());
+    newConfigCheckSumFile.close();
     return nodeConfig;
 }
 
-DynamicJsonDocument loadConfig(eSPIFFS *fileSystem)
+DynamicJsonDocument loadConfig()
 {
     DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(32));
-    uint32_t chksum = 0;
-    uint32_t nodeConfigChksum = 0;
-    String nodeConfigOutput;
+    File configFile = SPIFFS.open(NODE_CONFIG_PATH, "r");
+    File configCheckSumFile = SPIFFS.open(NODE_CONFIG_CHKSUM_PATH, "r");
+    unsigned long int chksum{0};
+    unsigned long int nodeConfigChksum = strtoul(configCheckSumFile.readString().c_str(), NULL, 10);
+    String nodeConfigOutput = configFile.readString();
 
-    fileSystem->openFromFile(NODE_CONFIG_PATH, nodeConfigOutput);
-    fileSystem->openFromFile(NODE_CONFIG_CHKSUM_PATH, nodeConfigChksum);
+    configFile.close();
+    configCheckSumFile.close();
+
+    LOG("Loading config");
+    LOG(nodeConfigOutput);
 
     CRC32 cs;
-    cs.update(nodeConfigOutput);
+    cs.update(nodeConfigOutput.c_str());
     chksum = cs.finalize();
 
-    if (nodeConfigChksum == chksum)
+    LOG("hashes");
+    LOG("nodeConfigChksum: " + (String)nodeConfigChksum);
+    LOG("chksum: " + (String)chksum);
+    if (nodeConfigChksum != chksum)
     {
-        LOG("Loading config");
-        LOG(nodeConfigOutput);
-        deserializeJson(nodeConfig, nodeConfigOutput);
-    }
-    else
-    {
+        configFile = SPIFFS.open(NODE_CONFIG_PATH, "w");
+        configCheckSumFile = SPIFFS.open(NODE_CONFIG_CHKSUM_PATH, "w");
+
         LOG("Creating default config");
         String defaultConfigOutput;
         nodeConfig["meshPrefix"].set(STR_VALUE(MESH_PREFIX));
@@ -179,51 +178,34 @@ DynamicJsonDocument loadConfig(eSPIFFS *fileSystem)
         nodeConfig["stationPassword"] = STR_VALUE(STATION_PASSWORD);
         nodeConfig["mqttHost"] = STR_VALUE(MQTT_HOST);
         nodeConfig["hostname"] = STR_VALUE(HOSTNAME);
-        nodeConfig["isRoot"] = true;
+        nodeConfig["isRoot"] = false;
+
         LOG("Writing default config");
         serializeJson(nodeConfig, defaultConfigOutput);
-        fileSystem->saveToFile(NODE_CONFIG_PATH, defaultConfigOutput);
-        LOG("Writing default config chksum");
-        fileSystem->saveToFile(NODE_CONFIG_CHKSUM_PATH, chksum);
+        configFile.print(nodeConfigOutput);
+
+        CRC32 defaultCS;
+        defaultCS.update(nodeConfigOutput.c_str());
+        unsigned long int defaultCSchksum = defaultCS.finalize();
+        configCheckSumFile.print(String(defaultCSchksum).c_str());
+
+        configFile.close();
+        configCheckSumFile.close();
     }
-    LOG("#######");
+    else
+    {
+        DeserializationError err = deserializeJson(nodeConfig, nodeConfigOutput);
+        if (err)
+            LOG(err.f_str());
+    }
     return nodeConfig;
 }
 
-void createMesh(painlessMesh *mesh, String prefix, String password, int port, int channel, String hostname, String ssid, String stationPassword, bool root, painlessmesh::receivedCallback_t onReceive)
-{
-    mesh->setDebugMsgTypes(ERROR | STARTUP | CONNECTION); // set before init() so that you can see startup messages
-
-    // Channel set to 6. Make sure to use the same channel for your mesh and for you other
-    // network (STATION_SSID)
-    LOG("===");
-    LOG(prefix);
-    LOG(password);
-    LOG(ssid);
-    LOG("===");
-    mesh->init(prefix,
-               password,
-               port,
-               WIFI_AP_STA,
-               channel || 6);
-    mesh->onReceive(onReceive);
-
-    mesh->stationManual(ssid, stationPassword);
-    mesh->setHostname((hostname).c_str());
-
-    // Bridge node, should (in most cases) be a root node. See [the wiki](https://gitlab.com/painlessMesh/painlessMesh/wikis/Possible-challenges-in-mesh-formation) for some background
-    mesh->setRoot(root);
-    // This node and all other nodes should ideally know the mesh contains a root, so call this on all nodes
-    mesh->setContainsRoot(true);
-}
-
-void receivedCallback(const uint32_t &_from, const String &msg)
+void receivedCallback(const unsigned long int &_from, const String &msg)
 {
     String from = (String)_from;
     LOG(String("bridge: Received from ") + from.c_str() + String(" msg=") + msg);
-}
-
-IPAddress getlocalIP(painlessMesh *mesh)
-{
-    return IPAddress(mesh->getStationIP());
+    String config{""};
+    serializeJson(nodeConfig, config);
+    LOG("config: \n" + config);
 }
