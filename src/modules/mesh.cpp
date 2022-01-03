@@ -12,7 +12,7 @@ void createMesh(painlessMesh *mesh, String prefix, String password, int port, in
                WIFI_AP_STA,
                channel || 6);
     mesh->onReceive(onReceive);
-    mesh->setHostname((hostname).c_str());
+    mesh->setHostname(hostname.c_str());
 
     // Bridge node, should (in most cases) be a root node. See [the wiki](https://gitlab.com/painlessMesh/painlessMesh/wikis/Possible-challenges-in-mesh-formation) for some background
     if (root)
@@ -22,4 +22,9 @@ void createMesh(painlessMesh *mesh, String prefix, String password, int port, in
     }
     // This node and all other nodes should ideally know the mesh contains a root, so call this on all nodes
     mesh->setContainsRoot(true);
+}
+
+IPAddress getlocalIP(painlessMesh *mesh)
+{
+    return IPAddress(mesh->getStationIP());
 }
