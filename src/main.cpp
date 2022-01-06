@@ -1,32 +1,22 @@
-// TODO: setup command handler integration on mesh callback
-// TODO: setup MQTT bridge connection and command handler integration
 // TODO: setup command handler integration on the webserver main endpoint
 // TODO: setup web client interface and integration to the command handler
 // TODO: "Democracy" implementation
 // TODO: cronie alike
+// TODO: cleanup command handler response (avoid credentials)
 #include "log.h"
 #include "modules/mesh.h"
 #include "modules/webserver.h"
 #include "modules/commands.h"
+#ifdef SINGLEOUTLET
+#include "modules/outlets.h"
+#endif
+#ifdef DOUBLEOUTLET
+#include "modules/outlets.h"
+#endif
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 
-// #include <SPIFFS.h>
-
-// #define MESH_PREFIX uaiot
-// #define MESH_PASSWORD HafniumInsultSpecialLand9
-// #define MESH_PORT 5555
-// #define MESH_CHANNEL 6
-
-// #define STATION_SSID batata_frita
-// #define STATION_PASSWORD batataassadaS2
-
-// #define MQTT_HOST berry.ccs
-// #define HOSTNAME MQTT_Bridge_leaf
-// #define NODE_CONFIG_PATH "/config.txt"
-// #define NODE_CONFIG_CHKSUM_PATH "/configc.txt"
-
-DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(32));
+DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(NODE_CONFIG_SIZE));
 AsyncWebServer server(80);
 painlessMesh mesh;
 IPAddress myIP(0, 0, 0, 0);
@@ -36,8 +26,11 @@ PubSubClient mqttClient(wifiClient);
 
 #ifdef LEDSTRIP
 #include "modules/ledStrip.h"
-WS2812FX ws2812fx(LEDSTRIP_LEDS, 5, LEDSTRIP_TYPE);
-// WS2812FX *ws2812fx;
+WS2812FX ws2812fx(LEDSTRIP_LEDS, LEDSTRIP_PIN, LEDSTRIP_TYPE);
+
+void handleNodeUpdate(JsonObject payload, DynamicJsonDocument nodeConfig, WS2812FX *ws2812fx);
+#else
+void handleNodeUpdate(JsonObject payload, DynamicJsonDocument nodeConfig);
 #endif
 
 void mqttCallback(char *topic, byte *payload, unsigned int length);
@@ -55,25 +48,24 @@ void setup()
         return;
     }
 
-    // eSPIFFS fileSystem(&Serial);
     nodeConfig = loadConfig();
-    bool isRoot = nodeConfig["isRoot"].as<bool>();
+    bool isRoot = nodeConfig["node"]["isRoot"].as<bool>();
 
     LOG("Configuring mesh");
     createMesh(&mesh,
-               nodeConfig["meshPrefix"].as<String>(),
-               nodeConfig["meshPassword"].as<String>(),
-               nodeConfig["meshPort"].as<int>(),
-               nodeConfig["meshChannel"].as<int>(),
-               nodeConfig["hostname"].as<String>(),
-               nodeConfig["stationSSID"].as<String>(),
-               nodeConfig["stationPassword"].as<String>(),
+               nodeConfig["node"]["meshPrefix"].as<String>(),
+               nodeConfig["node"]["meshPassword"].as<String>(),
+               nodeConfig["node"]["meshPort"].as<int>(),
+               nodeConfig["node"]["meshChannel"].as<int>(),
+               nodeConfig["node"]["hostname"].as<String>(),
+               nodeConfig["node"]["stationSSID"].as<String>(),
+               nodeConfig["node"]["stationPassword"].as<String>(),
                isRoot,
                &receivedCallback);
 
     if (isRoot)
     {
-        mqttIP.fromString(nodeConfig["mqttHost"].as<String>());
+        mqttIP.fromString(nodeConfig["node"]["mqttHost"].as<String>());
         mqttClient.setServer(mqttIP, 1883);
         mqttClient.setCallback(mqttCallback);
     }
@@ -82,35 +74,28 @@ void setup()
 
     AsyncCallbackJsonWebHandler *handler = new AsyncCallbackJsonWebHandler("/node/setup", [&](AsyncWebServerRequest *request, JsonVariant &json)
                                                                            {
-                                                                               if (request->method() == HTTP_POST)
-                                                                               {
-                                                                                   nodeConfig.set(json.as<JsonObject>());
-                                                                                   updateNodeConfig(nodeConfig);
-
+#ifdef LEDSTRIP
+                                                                                   handleNodeUpdate(json.as<JsonObject>(), nodeConfig, &ws2812fx);
+#else
+                                                                                   handleNodeUpdate(json.as<JsonObject>(), nodeConfig);
+#endif
+                                                                                   
                                                                                    AsyncJsonResponse *response = new AsyncJsonResponse();
-                                                                                   response->addHeader("Server", nodeConfig["hostname"]);
+                                                                                   response->addHeader("Server", nodeConfig["node"]["hostname"]);
                                                                                    JsonObject root = response->getRoot();
                                                                                    root["data"] = nodeConfig;
-#ifdef LEDSTRIP
-                                                                                   setupLEDStrip(&ws2812fx, nodeConfig);
-#endif
                                                                                    response->setLength();
-                                                                                   request->send(response);
-                                                                               }
-                                                                               else
-                                                                               {
-                                                                                   request->send(404);
-                                                                               } });
+                                                                                   request->send(response); });
     server.addHandler(handler);
 
     AsyncCallbackJsonWebHandler *handlerBroadcast = new AsyncCallbackJsonWebHandler("/broadcast", [&](AsyncWebServerRequest *request, JsonVariant &json)
                                                                                     {
                                                                                         AsyncJsonResponse *response = new AsyncJsonResponse();
-                                                                                        response->addHeader("Server", nodeConfig["hostname"]);
+                                                                                        response->addHeader("Server", nodeConfig["node"]["hostname"]);
                                                                                         JsonObject root = response->getRoot();
                                                                                         root.set(json.as<JsonObject>());
                                                                                         
-                                                                                        String msg{""};
+                                                                                        String msg{""}; 
                                                                                         serializeJson(root, msg);
                                                                                         // LOG("msg: \n" + msg);
                                                                                         mesh.sendBroadcast(msg.c_str());
@@ -123,30 +108,49 @@ void setup()
 
     server.begin();
 #ifdef LEDSTRIP
-    // WS2812FX _ws2812fx(nodeConfig["ledStrip"]["leds"].as<uint8_t>(), 5, nodeConfig["ledStrip"]["type"].as<uint8_t>());
-    // ws2812fx = _ws2812fx;
+    LOG("Setting up ledStrip");
     ws2812fx.init();
     setupLEDStrip(&ws2812fx, nodeConfig);
     ws2812fx.start();
 #endif
+
+#ifdef SINGLEOUTLET
+    LOG("Setting up single outlet");
+    pinMode(SINGLEOUTLET_PIN, OUTPUT);
+    setupOutlet(SINGLEOUTLET_PIN, nodeConfig["outlets"]["state"][0]);
+#endif
+#ifdef DOUBLEOUTLET
+    LOG("Setting up double outlet");
+    pinMode(DOUBLEOUTLET_PIN0, OUTPUT);
+    setupOutlet(DOUBLEOUTLET_PIN0, nodeConfig["outlets"]["state"][0]);
+
+    pinMode(DOUBLEOUTLET_PIN1, OUTPUT);
+    setupOutlet(DOUBLEOUTLET_PIN1, nodeConfig["outlets"]["state"][1]);
+#endif
+    LOG("Finished setup");
 }
 
 void loop()
 {
-    bool isRoot = nodeConfig["isRoot"].as<bool>();
+    bool isRoot = nodeConfig["node"]["isRoot"].as<bool>();
     mesh.update();
-    if (isRoot)
-        mqttClient.loop();
     if (myIP != getlocalIP(&mesh))
     {
         myIP = getlocalIP(&mesh);
         LOG("My IP is " + myIP.toString());
         if (isRoot)
         {
-            if (mqttClient.connect("painlessMeshClient"))
+            if (mqttClient.connect(nodeConfig["node"]["hostname"].as<String>().c_str()))
             {
-                mqttClient.publish("painlessMesh/from/gateway", "Ready!");
-                mqttClient.subscribe("painlessMesh/to/#");
+                String hostname = nodeConfig["node"]["hostname"].as<String>();
+                String nodeTopic = nodeConfig["node"]["topic"].as<String>();
+                String publishPath = buildPublishTopic(hostname, nodeTopic);
+                String subPath = buildSubscribeTopic("#", nodeTopic);
+                String configStr{""};
+                serializeJson(nodeConfig, configStr);
+
+                mqttClient.publish(publishPath.c_str(), configStr.c_str());
+                mqttClient.subscribe(subPath.c_str());
             }
             else
             {
@@ -157,6 +161,8 @@ void loop()
             }
         }
     }
+    if (isRoot)
+        mqttClient.loop();
 #ifdef LEDSTRIP
     ws2812fx.service();
 #endif
@@ -169,7 +175,7 @@ void receivedCallback(const uint32_t &_from, const String &msg)
     LOG("from: " + topic);
     LOG("\n");
 
-    bool isRoot = nodeConfig["isRoot"].as<bool>();
+    bool isRoot = nodeConfig["node"]["isRoot"].as<bool>();
     if (isRoot)
     {
         mqttClient.publish(topic.c_str(), msg.c_str());
@@ -181,7 +187,17 @@ void receivedCallback(const uint32_t &_from, const String &msg)
     {
         LOG("Error parsing payload");
         LOG(e.f_str());
+        return;
     }
+
+#ifdef LEDSTRIP
+    handleNodeUpdate(payload.as<JsonObject>(), nodeConfig, &ws2812fx);
+#else
+    handleNodeUpdate(payload.as<JsonObject>(), nodeConfig);
+#endif
+    String nodeConfigString{""};
+    serializeJson(nodeConfig, nodeConfigString);
+    mqttClient.publish(topic.c_str(), nodeConfigString.c_str());
 }
 
 void mqttCallback(char *topic, uint8_t *payload, unsigned int length)
@@ -193,8 +209,11 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length)
     free(cleanPayload);
 
     String targetStr = String(topic).substring(16);
+    String hostname = nodeConfig["node"]["hostname"].as<String>();
+    String nodeTopic = nodeConfig["node"]["topic"].as<String>();
+    String publishPath = buildPublishTopic(hostname, nodeTopic);
 
-    if (targetStr == "gateway")
+    if (targetStr == hostname)
     {
         if (msg == "getNodes")
         {
@@ -202,7 +221,26 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length)
             String str;
             for (auto &&id : nodes)
                 str += String(id) + String(";");
-            mqttClient.publish("painlessMesh/from/gateway", str.c_str());
+            mqttClient.publish(publishPath.c_str(), str.c_str());
+        }
+        else
+        {
+            DynamicJsonDocument data(JSON_OBJECT_SIZE(32));
+            DeserializationError e = deserializeJson(data, msg.c_str());
+            if (e)
+            {
+                LOG("Error parsing payload");
+                LOG(e.f_str());
+                return;
+            }
+#ifdef LEDSTRIP
+            handleNodeUpdate(data.as<JsonObject>(), nodeConfig, &ws2812fx);
+#else
+            handleNodeUpdate(data.as<JsonObject>(), nodeConfig);
+#endif
+            String result{""};
+            deserializeJson(nodeConfig, result);
+            mqttClient.publish(publishPath.c_str(), result.c_str());
         }
     }
     else if (targetStr == "broadcast")
@@ -218,7 +256,42 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length)
         }
         else
         {
-            mqttClient.publish("painlessMesh/from/gateway", "Client not connected!");
+            mqttClient.publish(publishPath.c_str(), "Client not connected!");
         }
     }
+}
+
+#ifdef LEDSTRIP
+void handleNodeUpdate(JsonObject payload, DynamicJsonDocument nodeConfig, WS2812FX *ws2812fx)
+#else
+void handleNodeUpdate(JsonObject payload, DynamicJsonDocument nodeConfig)
+#endif
+{
+    uint8_t type = payload["t"].as<uint8_t>();
+    JsonObject data = payload["p"].as<JsonObject>();
+    LOG("NodeUpdate: " + String(type));
+    switch (type)
+    {
+    case 1:
+        nodeConfig.set(data);
+        break;
+    case 2:
+        String module = nodeConfig["module"]["type"].as<String>();
+        nodeConfig[module].set(data);
+        break;
+    }
+
+    // saves the NodeConfig to a file
+    updateNodeConfig(nodeConfig);
+
+#ifdef LEDSTRIP
+    setupLEDStrip(ws2812fx, nodeConfig);
+#endif
+#ifdef SINGLEOUTLET
+    setupOutlet(SINGLEOUTLET_PIN, nodeConfig["outlets"]["state"][0]);
+#endif
+#ifdef DOUBLEOUTLET
+    setupOutlet(DOUBLEOUTLET_PIN0, nodeConfig["outlets"]["state"][0]);
+    setupOutlet(DOUBLEOUTLET_PIN1, nodeConfig["outlets"]["state"][1]);
+#endif
 }

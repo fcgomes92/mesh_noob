@@ -28,24 +28,30 @@ bool updateNodeConfig(DynamicJsonDocument newNodeConfig)
     String newConfigOutput{""};
     serializeJson(newNodeConfig, newConfigOutput);
     uint32_t checksum = getCheckSum(newConfigOutput);
-    bool contentResult = writeFileContent(STR_VALUE(NODE_CONFIG_PATH), newConfigOutput);
-    bool checksumResult = writeFileContent(STR_VALUE(NODE_CONFIG_CHKSUM_PATH), String(checksum));
+    String contentResult = writeFileContent(STR_VALUE(NODE_CONFIG_PATH), newConfigOutput);
+    String checksumResult = writeFileContent(STR_VALUE(NODE_CONFIG_CHKSUM_PATH), String(checksum));
     return contentResult && checksumResult;
 }
 
 DynamicJsonDocument getDefaultNodeConfig()
 {
-    DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(32));
-    nodeConfig["meshPrefix"].set(STR_VALUE(MESH_PREFIX));
-    nodeConfig["meshPassword"] = STR_VALUE(MESH_PASSWORD);
-    nodeConfig["meshPort"] = MESH_PORT;
-    nodeConfig["meshChannel"] = MESH_CHANNEL;
-    nodeConfig["stationSSID"] = STR_VALUE(STATION_SSID);
-    nodeConfig["stationPassword"] = STR_VALUE(STATION_PASSWORD);
-    nodeConfig["mqttHost"] = STR_VALUE(MQTT_HOST);
-    nodeConfig["hostname"] = STR_VALUE(HOSTNAME);
-    nodeConfig["isRoot"] = NODE_IS_ROOT;
+    DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(NODE_CONFIG_SIZE));
+    JsonObject node = nodeConfig.createNestedObject("node");
+    node["meshPrefix"].set(STR_VALUE(MESH_PREFIX));
+    node["meshPassword"] = STR_VALUE(MESH_PASSWORD);
+    node["meshPort"] = MESH_PORT;
+    node["meshChannel"] = MESH_CHANNEL;
+    node["stationSSID"] = STR_VALUE(STATION_SSID);
+    node["stationPassword"] = STR_VALUE(STATION_PASSWORD);
+    node["mqttHost"] = STR_VALUE(MQTT_HOST);
+    node["hostname"] = STR_VALUE(HOSTNAME);
+    node["topic"] = STR_VALUE(TOPIC);
+    node["isRoot"] = NODE_IS_ROOT;
 #ifdef LEDSTRIP
+    JsonObject module = nodeConfig.createNestedObject("module");
+    module["name"] = STR_VALUE(HOSTNAME);
+    module["type"] = "lefStrip";
+
     JsonObject ledStrip = nodeConfig.createNestedObject("ledStrip");
     ledStrip["leds"] = LEDSTRIP_LEDS;
     ledStrip["type"] = LEDSTRIP_TYPE;
@@ -53,13 +59,31 @@ DynamicJsonDocument getDefaultNodeConfig()
     ledStrip["speed"] = LEDSTRIP_SPEED;
     ledStrip["mode"] = LEDSTRIP_MODE;
 #endif
+#ifdef SINGLEOUTLET
+    JsonObject module = nodeConfig.createNestedObject("module");
+    module["name"] = STR_VALUE(HOSTNAME);
+    module["type"] = "outlets";
 
+    JsonObject outlets = nodeConfig.createNestedObject("outlets");
+    JsonArray state = outlets.createNestedArray("state");
+    state.add(false);
+#endif
+#ifdef DOUBLEOUTLET
+    JsonObject module = nodeConfig.createNestedObject("module");
+    module["name"] = STR_VALUE(HOSTNAME);
+    module["type"] = "outlets";
+
+    JsonObject outlets = nodeConfig.createNestedObject("outlets");
+    JsonArray state = outlets.createNestedArray("state");
+    state.add(false);
+    state.add(false);
+#endif
     return nodeConfig;
 }
 
 DynamicJsonDocument loadConfig()
 {
-    DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(32));
+    DynamicJsonDocument nodeConfig(JSON_OBJECT_SIZE(NODE_CONFIG_SIZE));
     String nodeConfigOutput = getFileContent(STR_VALUE(NODE_CONFIG_PATH));
     uint32_t nodeConfigChksum = strtoul(getFileContent(STR_VALUE(NODE_CONFIG_CHKSUM_PATH)).c_str(), NULL, 10);
     uint32_t chksum = getCheckSum(nodeConfigOutput);
@@ -90,4 +114,14 @@ DynamicJsonDocument loadConfig()
     LOG("Writing default config");
     updateNodeConfig(nodeConfig);
     return nodeConfig;
+}
+
+String buildPublishTopic(String from, String topic)
+{
+    return topic + "/from/" + from;
+}
+
+String buildSubscribeTopic(String to, String topic)
+{
+    return topic + "/to/" + to;
 }

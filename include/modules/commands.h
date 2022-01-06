@@ -11,5 +11,7 @@ String writeFileContent(String fileName, String data);
 uint32_t getCheckSum(String data);
 bool updateNodeConfig(DynamicJsonDocument newNodeConfig);
 DynamicJsonDocument loadConfig();
+String buildSubscribeTopic(String to, String topic);
+String buildPublishTopic(String from, String topic);
 
 #endif

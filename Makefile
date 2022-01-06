@@ -10,9 +10,9 @@ monitor:
 	@pio device monitor
 
 upload:
-	@pio run --target upload
+	@pio run --target upload -e $(PIOENV)
 
 _uploadFiles:
-	@pio run --target uploadfs
+	@pio run --target uploadfs -e $(PIOENV)
 
 uploadFiles: _uploadFiles monitor

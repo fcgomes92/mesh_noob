@@ -7,7 +7,11 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <FS.h>
+#ifndef ESP8266
 #include <SPIFFS.h>
+#else
+// #define SPIFFS FS
+#endif
 #include <CRC32.h>
 #include <Arduino.h>
 
@@ -21,6 +25,8 @@
 
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
+
+#define NODE_CONFIG_SIZE 48
 
 #ifndef STRINGIZER
 #define STRINGIZER(arg) #arg
@@ -70,6 +76,10 @@
 #define HOSTNAME MQTT_Bridge_leaf3
 #endif
 
+#ifndef TOPIC
+#define TOPIC ccs/outlets
+#endif
+
 #ifndef NODE_CONFIG_PATH
 #define NODE_CONFIG_PATH /config.txt
 #endif
@@ -83,6 +93,9 @@
 #endif
 
 #ifdef LEDSTRIP
+#ifndef LEDSTRIP_PIN
+#define LEDSTRIP_PIN 5
+#endif
 #ifndef LEDSTRIP_LEDS
 #define LEDSTRIP_LEDS 144
 #endif
@@ -97,6 +110,21 @@
 #endif
 #ifndef LEDSTRIP_MODE
 #define LEDSTRIP_MODE FX_MODE_RAINBOW_CYCLE
+#endif
+#endif
+
+#ifdef SINGLEOUTLET
+#ifndef SINGLEOUTLET_PIN
+#define SINGLEOUTLET_PIN 0
+#endif
+#endif
+
+#ifdef DOUBLEOUTLET
+#ifndef DOUBLEOUTLET_PIN0
+#define DOUBLEOUTLET_PIN0 4
+#endif
+#ifndef DOUBLEOUTLET_PIN1
+#define DOUBLEOUTLET_PIN1 5
 #endif
 #endif
 

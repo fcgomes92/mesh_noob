@@ -6,7 +6,7 @@ int createHTTPServer(AsyncWebServer *server, DynamicJsonDocument nodeConfig)
     server->on("/settings/node", HTTP_GET, [&](AsyncWebServerRequest *request)
                {
                   AsyncJsonResponse *response = new AsyncJsonResponse();
-                  response->addHeader("Server", nodeConfig["hostname"]);
+                  response->addHeader("Server", nodeConfig["node"]["hostname"]);
                   JsonObject root = response->getRoot();
                   root.set(nodeConfig.as<JsonObject>());
                   response->setLength();
