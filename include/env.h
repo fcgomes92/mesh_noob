@@ -26,7 +26,7 @@
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
 
-#define NODE_CONFIG_SIZE 48
+#define NODE_CONFIG_SIZE 64
 
 #ifndef STRINGIZER
 #define STRINGIZER(arg) #arg
@@ -97,7 +97,7 @@
 #define LEDSTRIP_PIN 5
 #endif
 #ifndef LEDSTRIP_LEDS
-#define LEDSTRIP_LEDS 144
+#define LEDSTRIP_LEDS 16
 #endif
 #ifndef LEDSTRIP_TYPE
 #define LEDSTRIP_TYPE (NEO_GRB + NEO_KHZ800)

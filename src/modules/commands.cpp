@@ -48,31 +48,23 @@ DynamicJsonDocument getDefaultNodeConfig()
     node["topic"] = STR_VALUE(TOPIC);
     node["isRoot"] = NODE_IS_ROOT;
 #ifdef LEDSTRIP
-    JsonObject module = nodeConfig.createNestedObject("module");
-    module["name"] = STR_VALUE(HOSTNAME);
-    module["type"] = "lefStrip";
-
+    node["module"] = "lefStrip";
     JsonObject ledStrip = nodeConfig.createNestedObject("ledStrip");
     ledStrip["leds"] = LEDSTRIP_LEDS;
     ledStrip["type"] = LEDSTRIP_TYPE;
     ledStrip["bright"] = LEDSTRIP_BRIGHT;
     ledStrip["speed"] = LEDSTRIP_SPEED;
     ledStrip["mode"] = LEDSTRIP_MODE;
+    ledStrip["color"] = 16777216;
 #endif
 #ifdef SINGLEOUTLET
-    JsonObject module = nodeConfig.createNestedObject("module");
-    module["name"] = STR_VALUE(HOSTNAME);
-    module["type"] = "outlets";
-
+    node["module"] = "outlets";
     JsonObject outlets = nodeConfig.createNestedObject("outlets");
     JsonArray state = outlets.createNestedArray("state");
     state.add(false);
 #endif
 #ifdef DOUBLEOUTLET
-    JsonObject module = nodeConfig.createNestedObject("module");
-    module["name"] = STR_VALUE(HOSTNAME);
-    module["type"] = "outlets";
-
+    node["module"] = "outlets";
     JsonObject outlets = nodeConfig.createNestedObject("outlets");
     JsonArray state = outlets.createNestedArray("state");
     state.add(false);
