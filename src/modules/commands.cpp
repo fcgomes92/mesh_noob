@@ -23,7 +23,7 @@ uint32_t getCheckSum(String data)
     return cs.finalize();
 }
 
-bool updateNodeConfig(DynamicJsonDocument newNodeConfig)
+bool updateNodeConfig(JsonObject newNodeConfig)
 {
     String newConfigOutput{""};
     serializeJson(newNodeConfig, newConfigOutput);
@@ -104,7 +104,7 @@ DynamicJsonDocument loadConfig()
     LOG("Creating default config");
     nodeConfig = getDefaultNodeConfig();
     LOG("Writing default config");
-    updateNodeConfig(nodeConfig);
+    updateNodeConfig(nodeConfig.as<JsonObject>());
     return nodeConfig;
 }
 

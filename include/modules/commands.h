@@ -9,8 +9,9 @@
 String getFileContent(String fileName);
 String writeFileContent(String fileName, String data);
 uint32_t getCheckSum(String data);
-bool updateNodeConfig(DynamicJsonDocument newNodeConfig);
+bool updateNodeConfig(JsonObject newNodeConfig);
 DynamicJsonDocument loadConfig();
+DynamicJsonDocument getDefaultNodeConfig();
 String buildSubscribeTopic(String to, String topic);
 String buildPublishTopic(String from, String topic);
 

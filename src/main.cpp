@@ -25,14 +25,14 @@ PubSubClient mqttClient(wifiClient);
 #include "modules/ledStrip.h"
 WS2812FX ws2812fx(LEDSTRIP_LEDS, LEDSTRIP_PIN, LEDSTRIP_TYPE);
 
-void handleNodeUpdate(JsonObject payload, DynamicJsonDocument *nodeConfig, WS2812FX *ws2812fx);
+void handleNodeUpdate(JsonObject payload, JsonObject nodeConfig, WS2812FX *ws2812fx);
 #else
-void handleNodeUpdate(JsonObject payload, DynamicJsonDocument *nodeConfig);
+void handleNodeUpdate(JsonObject payload, JsonObject nodeConfig);
 #endif
 
 void mqttCallback(char *topic, byte *payload, unsigned int length);
 void receivedCallback(const uint32_t &_from, const String &msg);
-void publishConfig(DynamicJsonDocument *nodeConfig, PubSubClient *mqttClient, painlessMesh *mesh);
+void publishConfig(JsonObject nodeConfig, PubSubClient *mqttClient, painlessMesh *mesh);
 
 void setup()
 {
@@ -73,16 +73,16 @@ void setup()
     AsyncCallbackJsonWebHandler *handler = new AsyncCallbackJsonWebHandler("/node/setup", [&](AsyncWebServerRequest *request, JsonVariant &json)
                                                                            {
 #ifdef LEDSTRIP
-                                                                                   handleNodeUpdate(json.as<JsonObject>(), &nodeConfig, &ws2812fx);
+                                                                                   handleNodeUpdate(json.as<JsonObject>(), nodeConfig.as<JsonObject>(), &ws2812fx);
 #else
-                                                                                   handleNodeUpdate(json.as<JsonObject>(), &nodeConfig);
+                                                                                   handleNodeUpdate(json.as<JsonObject>(), nodeConfig.as<JsonObject>());
 #endif
-
+                                                                                   nodeConfig.garbageCollect();
                                                                                    AsyncJsonResponse *response = new AsyncJsonResponse();
                                                                                    response->addHeader("Server", nodeConfig["node"]["hostname"]);
                                                                                    JsonObject root = response->getRoot();
                                                                                    root["data"] = nodeConfig;
-                                                                                   publishConfig(&nodeConfig, &mqttClient, &mesh);
+                                                                                   publishConfig(nodeConfig.as<JsonObject>(), &mqttClient, &mesh);
                                                                                    response->setLength();
                                                                                    request->send(response); });
     server.addHandler(handler);
@@ -154,7 +154,7 @@ void loop()
                 // serializeJson(nodeConfig, configStr);
 
                 // mqttClient.publish(publishPath.c_str(), configStr.c_str());
-                publishConfig(&nodeConfig, &mqttClient, &mesh);
+                publishConfig(nodeConfig.as<JsonObject>(), &mqttClient, &mesh);
                 mqttClient.subscribe(subPath.c_str());
             }
             else
@@ -196,9 +196,9 @@ void receivedCallback(const uint32_t &_from, const String &msg)
     }
 
 #ifdef LEDSTRIP
-    handleNodeUpdate(payload.as<JsonObject>(), &nodeConfig, &ws2812fx);
+    handleNodeUpdate(payload.as<JsonObject>(), nodeConfig.as<JsonObject>(), &ws2812fx);
 #else
-    handleNodeUpdate(payload.as<JsonObject>(), &nodeConfig);
+    handleNodeUpdate(payload.as<JsonObject>(), nodeConfig.as<JsonObject>());
 #endif
     String nodeConfigString{""};
     serializeJson(nodeConfig, nodeConfigString);
@@ -235,17 +235,21 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length)
             {
                 LOG("Error parsing payload");
                 LOG(e.f_str());
-                return;
             }
+            else
+            {
 #ifdef LEDSTRIP
-            handleNodeUpdate(data.as<JsonObject>(), &nodeConfig, &ws2812fx);
+                handleNodeUpdate(data.as<JsonObject>(), nodeConfig.as<JsonObject>(), &ws2812fx);
 #else
-            handleNodeUpdate(data.as<JsonObject>(), &nodeConfig);
+                handleNodeUpdate(data.as<JsonObject>(), nodeConfig.as<JsonObject>());
 #endif
-            // String result{""};
-            // serializeJson(nodeConfig, result);
-            // mqttClient.publish(publishPath.c_str(), result.c_str());
-            publishConfig(&nodeConfig, &mqttClient, &mesh);
+                data.clear();
+                nodeConfig.garbageCollect();
+                // String result{""};
+                // serializeJson(nodeConfig, result);
+                // mqttClient.publish(publishPath.c_str(), result.c_str());
+                publishConfig(nodeConfig.as<JsonObject>(), &mqttClient, &mesh);
+            }
         }
     }
     else if (targetStr == "broadcast")
@@ -267,9 +271,9 @@ void mqttCallback(char *topic, uint8_t *payload, unsigned int length)
 }
 
 #ifdef LEDSTRIP
-void handleNodeUpdate(JsonObject payload, DynamicJsonDocument *nodeConfig, WS2812FX *ws2812fx)
+void handleNodeUpdate(JsonObject payload, JsonObject nodeConfig, WS2812FX *ws2812fx)
 #else
-void handleNodeUpdate(JsonObject payload, DynamicJsonDocument *nodeConfig)
+void handleNodeUpdate(JsonObject payload, JsonObject nodeConfig)
 #endif
 {
     uint8_t type = payload["t"].as<uint8_t>();
@@ -278,42 +282,43 @@ void handleNodeUpdate(JsonObject payload, DynamicJsonDocument *nodeConfig)
     switch (type)
     {
     case 1:
-        (*nodeConfig).set(data);
+        nodeConfig.set(data);
         break;
     case 2:
-        String module = (*nodeConfig)["module"].as<String>();
-        String dataStr{""};
-        serializeJson(data, dataStr);
-        (*nodeConfig)[module].set(data);
+    {
+        String module = nodeConfig["module"].as<String>();
+        nodeConfig[module].set(data);
         break;
+    }
     }
 
     // saves the NodeConfig to a file
-    updateNodeConfig((*nodeConfig));
+    updateNodeConfig(nodeConfig);
 
 #ifdef LEDSTRIP
-    setupLEDStrip(ws2812fx, (*nodeConfig));
+    setupLEDStrip(ws2812fx, nodeConfig);
 #endif
 #ifdef SINGLEOUTLET
-    setupOutlet(SINGLEOUTLET_PIN, (*nodeConfig)["outlets"]["state"][0]);
+    setupOutlet(SINGLEOUTLET_PIN, nodeConfig["outlets"]["state"][0]);
 #endif
 #ifdef DOUBLEOUTLET
-    setupOutlet(DOUBLEOUTLET_PIN0, (*nodeConfig)["outlets"]["state"][0]);
-    setupOutlet(DOUBLEOUTLET_PIN1, (*nodeConfig)["outlets"]["state"][1]);
+    setupOutlet(DOUBLEOUTLET_PIN0, nodeConfig["outlets"]["state"][0]);
+    setupOutlet(DOUBLEOUTLET_PIN1, nodeConfig["outlets"]["state"][1]);
 #endif
+    data.clear();
 }
 
-void publishConfig(DynamicJsonDocument *nodeConfig, PubSubClient *mqttClient, painlessMesh *mesh)
+void publishConfig(JsonObject nodeConfig, PubSubClient *mqttClient, painlessMesh *mesh)
 {
-    bool isRoot = (*nodeConfig)["node"]["isRoot"].as<bool>();
-    String hostname = (*nodeConfig)["node"]["hostname"].as<String>();
-    String nodeTopic = (*nodeConfig)["node"]["topic"].as<String>();
+    bool isRoot = nodeConfig["node"]["isRoot"].as<bool>();
+    String hostname = nodeConfig["node"]["hostname"].as<String>();
+    String nodeTopic = nodeConfig["node"]["topic"].as<String>();
     String publishPath = buildPublishTopic(hostname, nodeTopic);
-    String module = (*nodeConfig)["module"].as<String>();
+    String module = nodeConfig["module"].as<String>();
     String moduleConfig{""};
     String node{""};
-    serializeJson((*nodeConfig)[module], moduleConfig);
-    serializeJson((*nodeConfig)["node"], node);
+    serializeJson(nodeConfig[module], moduleConfig);
+    serializeJson(nodeConfig["node"], node);
     if (isRoot)
     {
         mqttClient->publish(buildPublishTopic(hostname + "/" + module, nodeTopic).c_str(), moduleConfig.c_str());
