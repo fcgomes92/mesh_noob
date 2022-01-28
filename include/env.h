@@ -97,7 +97,7 @@
 #define LEDSTRIP_PIN 5
 #endif
 #ifndef LEDSTRIP_LEDS
-#define LEDSTRIP_LEDS 16
+#define LEDSTRIP_LEDS 144
 #endif
 #ifndef LEDSTRIP_TYPE
 #define LEDSTRIP_TYPE (NEO_GRB + NEO_KHZ800)
@@ -125,6 +125,20 @@
 #endif
 #ifndef DOUBLEOUTLET_PIN1
 #define DOUBLEOUTLET_PIN1 5
+#endif
+#endif
+
+#ifdef SENSOR
+#ifndef DOUBLEOUTLET
+#define SENSOR_TYPE HTC
+#endif
+
+#ifndef DHTPIN
+#define DHTPIN 0
+#endif
+
+#ifndef DHTTYPE
+#define DHTTYPE DHT11
 #endif
 #endif
 

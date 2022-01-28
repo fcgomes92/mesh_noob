@@ -34,6 +34,52 @@ void mqttCallback(char *topic, byte *payload, unsigned int length);
 void receivedCallback(const uint32_t &_from, const String &msg);
 void publishConfig(JsonObject nodeConfig, PubSubClient *mqttClient, painlessMesh *mesh);
 
+#ifdef SENSOR
+#include "DHT.h"
+DHT dht(DHTPIN, DHTTYPE);
+
+Scheduler nodeScheduler;
+bool setupSensor(painlessMesh *mesh, JsonObject nodeConfig, PubSubClient *mqttClient);
+bool setupSensor(painlessMesh *mesh, JsonObject nodeConfig, PubSubClient *mqttClient)
+{
+    dht.begin();
+    bool isRoot = nodeConfig["node"]["isRoot"].as<bool>();
+    String module = nodeConfig["module"].as<String>();
+    JsonObject sensorConfig = nodeConfig[module].as<JsonObject>();
+    unsigned long updateInterval = sensorConfig["interval"].as<unsigned long>();
+    mesh->addTask(updateInterval, TASK_FOREVER, [mesh, nodeConfig, mqttClient, isRoot]()
+                  {
+                      if (myIP.toString().equals(getlocalIP(mesh).toString()))
+                        LOG("Running task");
+                      {
+                        DynamicJsonDocument jsonBuffer(1024);
+                                JsonObject msg = jsonBuffer.to<JsonObject>();
+                                msg["id"] = mesh->getNodeId();
+                                msg["h"] = dht.readHumidity();
+                                msg["t"] = dht.readTemperature();
+
+                                String str{""};
+                                serializeJson(msg, str);
+                                if (isRoot)
+                                {
+                                    String hostname = nodeConfig["node"]["hostname"].as<String>();
+                                    String nodeTopic = nodeConfig["node"]["topic"].as<String>();
+                                        // String publishPath = buildPublishTopic(hostname, nodeTopic);
+                                        // String subPath = buildSubscribeTopic("#", nodeTopic);
+                                        // publishConfig(nodeConfig, mqttClient, mesh);
+                                    mqttClient->publish(buildPublishTopic(hostname + "/sensor", nodeTopic).c_str(), str.c_str());
+                                        
+                                } 
+                                else 
+                                {
+                                    mesh->sendBroadcast(str); 
+                                } 
+                    } })
+        ->enable();
+    return 0;
+}
+#endif
+
 void setup()
 {
     delay(250);
@@ -130,6 +176,15 @@ void setup()
 
     pinMode(DOUBLEOUTLET_PIN1, OUTPUT);
     setupOutlet(DOUBLEOUTLET_PIN1, nodeConfig["outlets"]["state"][1]);
+#endif
+
+#ifdef SENSOR
+    LOG("Setting up sensor");
+    setupSensor(&mesh, nodeConfig.as<JsonObject>(), &mqttClient);
+    // nodeScheduler.addTask(*nodeSensorTask);
+    // nodeSensorTask->enable();
+    // mesh.addTask(nodeSensorTask);
+
 #endif
     LOG("Finished setup");
 }
